@@ -1,0 +1,18 @@
+# Web framework
+fastapi
+uvicorn[standard]
+
+# Environment variables
+python-dotenv
+
+# LLM (Groq)
+groq
+
+# Audio & Speech
+speechrecognition
+sounddevice
+numpy
+scipy
+
+# Validation
+pydantic
