@@ -35,3 +35,6 @@ backend/videos/
 # Logs
 # ===============================
 *.log
+
+firebase_service_account.json
+

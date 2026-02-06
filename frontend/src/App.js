@@ -10,13 +10,49 @@ function App() {
   const recorderRef = useRef(null);
   const videoStreamRef = useRef(null);
 
+  // 🔴 ADD THIS
+  const locationRef = useRef(null);
+
   const [started, setStarted] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [question, setQuestion] = useState("");
   const [status, setStatus] = useState("");
   const [result, setResult] = useState(null);
+  const [location, setLocation] = useState(null);
 
-  /* ---------------- VIDEO CONTROL ---------------- */
+  /* ---------------- LOCATION ---------------- */
+  const getLocation = () => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve("Location not supported");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+            );
+            const data = await res.json();
+
+            resolve(
+              `${data.address.city || data.address.town || data.address.village || ""}, ` +
+              `${data.address.state || ""}, ` +
+              `${data.address.country || ""}`
+            );
+          } catch {
+            resolve(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          }
+        },
+        () => resolve("Location access denied")
+      );
+    });
+  };
+
+  /* ---------------- VIDEO ---------------- */
   const startVideoRecording = async () => {
     const ws = new WebSocket("ws://localhost:8000/ws/claim/video");
     videoWs.current = ws;
@@ -31,9 +67,9 @@ function App() {
 
     const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
 
-    recorder.ondataavailable = e => {
+    recorder.ondataavailable = (e) => {
       if (e.data.size > 0) {
-        e.data.arrayBuffer().then(buf => ws.send(buf));
+        e.data.arrayBuffer().then((buf) => ws.send(buf));
       }
     };
 
@@ -45,7 +81,7 @@ function App() {
     recorderRef.current?.stop();
     recorderRef.current = null;
 
-    videoStreamRef.current?.getTracks().forEach(t => t.stop());
+    videoStreamRef.current?.getTracks().forEach((t) => t.stop());
     videoStreamRef.current = null;
 
     videoWs.current?.close();
@@ -59,6 +95,12 @@ function App() {
     setQuestion("Connecting...");
     setStatus("");
     setResult(null);
+
+    const loc = await getLocation();
+
+    // 🔴 STORE IN BOTH STATE AND REF
+    setLocation(loc);
+    locationRef.current = loc;
 
     await startVideoRecording();
   };
@@ -81,14 +123,22 @@ function App() {
       if (data.type === "completed") {
         setCompleted(true);
         setQuestion("Interview completed");
-        setStatus("Thank you. You may close this window.");
+        setStatus("Thank you.");
 
-        // 🔴 THIS IS THE ONLY PLACE VIDEO STOPS
         stopVideoRecording();
 
         fetch("http://localhost:8000/claim/result")
-          .then(res => res.json())
+          .then((res) => res.json())
           .then(setResult);
+
+        // 🔴 USE REF, NOT STATE
+        fetch("http://localhost:8000/claim/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location: locationRef.current
+          })
+        });
 
         ws.close();
       }
@@ -96,9 +146,11 @@ function App() {
 
     audioWs.current = ws;
     return () => ws.close();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started]);
 
-  /* ---------------- AUDIO RECORD ---------------- */
+  /* ---------------- AUDIO ---------------- */
   const startRecording = async () => {
     if (!started || completed) return;
 
@@ -109,7 +161,7 @@ function App() {
     processor = audioContext.createScriptProcessor(4096, 1, 1);
     pcmChunks = [];
 
-    processor.onaudioprocess = e =>
+    processor.onaudioprocess = (e) =>
       pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
 
     input.connect(processor);
@@ -123,28 +175,28 @@ function App() {
     processor.disconnect();
     input.disconnect();
     audioContext.close();
-    streamRef.getTracks().forEach(t => t.stop());
+    streamRef.getTracks().forEach((t) => t.stop());
 
-    const flat = pcmChunks.flatMap(c => Array.from(c));
-    const pcm16 = new Int16Array(flat.map(v => v * 32767));
+    const flat = pcmChunks.flatMap((c) => Array.from(c));
+    const pcm16 = new Int16Array(flat.map((v) => v * 32767));
 
     audioWs.current.send(pcm16.buffer);
     setStatus("Processing…");
   };
 
-  /* ---------------- RESET (UI ONLY) ---------------- */
   const resetInterview = () => {
     setStarted(false);
     setCompleted(false);
     setQuestion("");
     setStatus("");
     setResult(null);
+    setLocation(null);
+    locationRef.current = null;
   };
 
   return (
     <div className="page">
       <div className="container">
-
         <h1 className="title">ClaimSure AI</h1>
         <p className="subtitle">Automated Insurance Claim Interview</p>
 
@@ -157,27 +209,31 @@ function App() {
         )}
 
         {started && (
-          <div className="card">
-            <div className="video-box">
-              <video ref={videoRef} autoPlay muted playsInline />
-              <span className="video-label">Identity Verification</span>
+          <>
+            {location && <div className="location">📍 {location}</div>}
+
+            <div className="card">
+              <div className="video-box">
+                <video ref={videoRef} autoPlay muted playsInline />
+                <span className="video-label">Identity Verification</span>
+              </div>
+
+              <div className="interview-box">
+                <div className="question">{question}</div>
+
+                <button
+                  className="mic-btn"
+                  disabled={completed}
+                  onMouseDown={startRecording}
+                  onMouseUp={stopRecording}
+                >
+                  Hold to Speak
+                </button>
+
+                <div className="status">{status}</div>
+              </div>
             </div>
-
-            <div className="interview-box">
-              <div className="question">{question}</div>
-
-              <button
-                className="mic-btn"
-                disabled={completed}
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-              >
-                Hold to Speak
-              </button>
-
-              <div className="status">{status}</div>
-            </div>
-          </div>
+          </>
         )}
 
         {completed && result && (
@@ -186,7 +242,8 @@ function App() {
 
             {result.qa.map((item, i) => (
               <div key={i} className="qa-item">
-                <strong>Q:</strong> {item.question}<br />
+                <strong>Q:</strong> {item.question}
+                <br />
                 <strong>A:</strong> {item.answer}
               </div>
             ))}
@@ -196,7 +253,6 @@ function App() {
             </button>
           </div>
         )}
-
       </div>
     </div>
   );

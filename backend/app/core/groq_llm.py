@@ -37,29 +37,20 @@ def generate_next_question(last_answer: str | None = None):
     if not field:
         return None
 
-    if last_answer is not None:
-        conversation_history.append({
-            "field": field,
-            "answer": last_answer
-        })
-
-    history_text = "\n".join(
-        [f"- User answered: {h['answer']}" for h in conversation_history[-3:]]
-    )
-
     user_prompt = f"""
 Field to collect: {field}
 
-Conversation so far:
-{history_text if history_text else "- None"}
+Previous answer:
+{last_answer or "None"}
 
-Ask the next question to collect this field.
+Ask ONE clear question to collect this field.
+Return ONLY valid JSON.
 """
 
     try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
-            temperature=0.5,   # 🔥 important
+            temperature=0.5,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}
@@ -67,10 +58,14 @@ Ask the next question to collect this field.
         )
 
         raw = response.choices[0].message.content.strip()
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
 
-        parsed = json.loads(raw[start:end])
+        # 🔒 HARD JSON EXTRACTION
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            raise ValueError("No JSON found")
+
+        parsed = json.loads(match.group())
+
         return {
             "field": field,
             "question": parsed["question"]
@@ -78,6 +73,8 @@ Ask the next question to collect this field.
 
     except Exception as e:
         print("LLM error:", e)
+
+        # 🔁 SAFE FALLBACK (never blocks interview)
         return {
             "field": field,
             "question": f"Please tell me your {field.replace('_', ' ')}."

@@ -138,3 +138,13 @@ body {
 .qa-item {
   margin-bottom: 12px;
 }
+
+.location {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  color: #c7d2fe;
+}
