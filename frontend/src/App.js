@@ -1,3 +1,5 @@
+
+
 import React, { useEffect, useRef, useState } from "react";
 import "./App.css";
 
@@ -19,6 +21,9 @@ function App() {
   const [status, setStatus] = useState("");
   const [result, setResult] = useState(null);
   const [location, setLocation] = useState(null);
+
+const BASE_URL = process.env.REACT_APP_API_BASE;
+const WS_BASE = BASE_URL.replace("https", "wss");
 
   /* ---------------- LOCATION ---------------- */
   const getLocation = () => {
@@ -54,7 +59,8 @@ function App() {
 
   /* ---------------- VIDEO ---------------- */
   const startVideoRecording = async () => {
-    const ws = new WebSocket("ws://localhost:8000/ws/claim/video");
+    const ws = new WebSocket(`${WS_BASE}/ws/claim/video`);
+
     videoWs.current = ws;
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -109,7 +115,8 @@ function App() {
   useEffect(() => {
     if (!started) return;
 
-    const ws = new WebSocket("ws://localhost:8000/ws/claim/audio");
+    const ws = new WebSocket(`${WS_BASE}/ws/claim/audio`);
+
     ws.binaryType = "arraybuffer";
 
     ws.onmessage = (e) => {
@@ -127,12 +134,14 @@ function App() {
 
         stopVideoRecording();
 
-        fetch("http://localhost:8000/claim/result")
+        fetch(`${BASE_URL}/claim/result`)
+
           .then((res) => res.json())
           .then(setResult);
 
         // 🔴 USE REF, NOT STATE
-        fetch("http://localhost:8000/claim/upload", {
+        fetch(`${BASE_URL}/claim/upload`, {
+
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

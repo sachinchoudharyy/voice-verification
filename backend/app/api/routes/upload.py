@@ -1,19 +1,19 @@
 from fastapi import APIRouter
 from app.state.session_store import session_data
-from app.services.mongo_uploader import save_interview
+from app.services.supabase_uploader import upload_interview_to_supabase
 
 router = APIRouter()
 
 @router.post("/claim/upload")
 def upload_claim(data: dict):
-    result = save_interview(
+    video_url = upload_interview_to_supabase(
         session_id=session_data["session_id"],
-        qa_list=session_data["qa"],
-        location=data.get("location"),
-        video_path=session_data["video_path"]
+        video_path=session_data["video_path"],
+        qa=session_data["qa"],
+        location=data.get("location")
     )
 
     return {
-        "status": "saved_to_mongodb",
-        "session_id": session_data["session_id"]
+        "status": "saved_to_supabase",
+        "video_url": video_url
     }
